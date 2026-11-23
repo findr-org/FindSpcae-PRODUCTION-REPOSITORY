@@ -52,7 +52,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy.orm import mapped_column, Mapped, relationship
-from sqlalchemy import String, UUID, DateTime, ForeignKey, UniqueConstraint, Index
+from sqlalchemy import String, DateTime, ForeignKey, UniqueConstraint, Index, text
 
 from app.infrastructure.database.base import BaseModel
 
@@ -81,7 +81,7 @@ class AuthRefreshToken(BaseModel):
         ForeignKey("auth_session.id", ondelete="RESTRICT"), nullable=False
     )
 
-    token_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    token_hash: Mapped[str] = mapped_column(String(79), nullable=False)
 
     expires_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
@@ -98,9 +98,9 @@ class AuthRefreshToken(BaseModel):
         ),
         Index(
             "uq_auth_refresh_token_current",
-            "consumed_at  IS NULL",
             "session_id",
             unique=True,
+            postgresql_where=text("consumed_at IS NULL"),
         ),
         Index("ix_auth_refresh_token_expires_at", "expires_at"),
     )
