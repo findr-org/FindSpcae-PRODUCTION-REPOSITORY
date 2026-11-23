@@ -40,7 +40,7 @@ from app.infrastructure.database.base import BaseModel
 
 
 if TYPE_CHECKING:
-    from .emails import AuthEmail
+    from .email import AuthEmail
     from .identity import AuthIdentity
     from .session import AuthSession
 

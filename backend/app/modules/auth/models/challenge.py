@@ -63,7 +63,7 @@ from app.infrastructure.database.base import BaseModel
 
 
 if TYPE_CHECKING:
-    from .emails import AuthEmail
+    from .email import AuthEmail
 
 
 class VerificationPurpose(str, PyEnum):
