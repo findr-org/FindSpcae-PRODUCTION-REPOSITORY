@@ -78,7 +78,7 @@ class AuthRefreshToken(BaseModel):
     __tablename__ = "auth_refresh_token"
 
     session_id: Mapped[UUID] = mapped_column(
-        ForeignKey("auth_session.id", ondelete="RESTRICT"), nullable=False
+        ForeignKey("auth_session.id", ondelete="CASCADE"), nullable=False
     )
 
     token_hash: Mapped[str] = mapped_column(String(79), nullable=False)
