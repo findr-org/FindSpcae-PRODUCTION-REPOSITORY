@@ -1,4 +1,3 @@
-
 # ==========================#
 # Base.py
 # ==========================#
@@ -33,6 +32,7 @@ class Base(DeclarativeBase):
     Maintains the shared metadata registry used to define
     database tables and generate Alembic migrations.
     """
+
     pass
 
 
@@ -102,6 +102,3 @@ class BaseModel(UUIDMixin, TimeStampMixin, Base):
     """
 
     __abstract__ = True
-
-
-

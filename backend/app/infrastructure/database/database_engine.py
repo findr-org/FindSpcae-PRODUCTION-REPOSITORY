@@ -104,5 +104,3 @@ async def dispose_database_engines() -> None:
             await read_engine.dispose()
     finally:
         await primary_engine.dispose()
-
-

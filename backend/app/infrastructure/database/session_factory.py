@@ -117,5 +117,3 @@ readDbSession: TypeAlias = Annotated[
     AsyncSession,
     Depends(get_read_db),
 ]
-
-
