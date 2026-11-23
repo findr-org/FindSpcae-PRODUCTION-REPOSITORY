@@ -1,176 +1,145 @@
+"""Persistence operations for email addresses owned by auth accounts.
 
-#==========================#
-#Email.py
-#==========================#
+An account may have multiple email records, but each address is globally
+unique (case-insensitively) and only one verified email may be primary.
 
-
+This stateless repository executes queries using the supplied AsyncSession.
+It does not choose primary versus replica connections, decide email ownership,
+verify OTPs, enforce authentication policy, or commit transactions.
 """
-Repository for authentication email persistence.
-
-Provides asynchronous database operations for creating, retrieving,
-updating, and deleting AuthEmail records.
-
-Responsibilities:
-- Create email records associated with authentication accounts.
-- Retrieve email records by ID or email address.
-- Retrieve all emails belonging to an account.
-- Retrieve primary and password-login-eligible email records.
-- Persist modifications to existing email records.
-- Delete email records when permitted.
-
-Design:
-- Uses stateless asynchronous static methods.
-- Receives an AsyncSession explicitly for every operation.
-- Remains independent of primary/replica database selection.
-- Supports row-level locking where appropriate.
-- Flushes changes without committing transactions.
-
-Not responsible for:
-- Verifying email ownership or validating OTPs.
-- Deciding which email should become primary.
-- Managing password hashes or authentication identities.
-- Enforcing account-level authorization rules.
-- Managing database sessions or transaction boundaries.
-"""
-
-
-
 
 from __future__ import annotations
+
 from uuid import UUID
 
-from sqlalchemy import delete, select , delete
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.modules.auth.models import AuthEmail 
+from app.modules.auth.models import AuthEmail
+
 
 class AuthEmailRepository:
-    """
-    Stateless data access interface for authentication emails.
-
-    Encapsulates SQLAlchemy persistence and lookup operations
-    for AuthEmail records using asynchronous static methods.
-
-    Every method operates on the supplied AsyncSession.
-
-    Email verification, ownership decisions, and primary-email
-    selection rules are handled by the service layer.
-    """
-
-
+    """Data access for AuthEmail; callers own validation and transactions."""
 
     @staticmethod
-    async def create(
-        db : AsyncSession,
-        email : AuthEmail
-    ) -> AuthEmail:
+    async def create(db: AsyncSession, email: AuthEmail) -> AuthEmail:
+        """Add an email record and flush its INSERT without committing."""
         db.add(email)
         await db.flush()
         return email
 
-
-
     @staticmethod
     async def get_by_id(
-        db : AsyncSession,
-        id : UUID,
-        lock : bool = False
+        db: AsyncSession,
+        email_id: UUID,
+        lock: bool = False,
     ) -> AuthEmail | None:
-        query = select(AuthEmail).where(
-            AuthEmail.id == id
-        )
+        """Find an email by record ID, optionally locking the row.
 
+        Row locks require a primary database session and an open transaction.
+        Return None when the record does not exist.
+        """
+        query = select(AuthEmail).where(AuthEmail.id == email_id)
         if lock:
             query = query.with_for_update()
 
         result = await db.execute(query)
         return result.scalar_one_or_none()
-        
-
 
     @staticmethod
     async def get_by_email(
-        db : AsyncSession,
-        email : AuthEmail,
-        lock : bool = False
+        db: AsyncSession,
+        email: str,
+        lock: bool = False,
     ) -> AuthEmail | None:
+        """Find an email address regardless of case or surrounding whitespace.
+
+        Uses the same lower(email) expression as the model's unique index.
+        Return None when the address is not registered.
+        """
+        normalized_email = email.strip().lower()
         query = select(AuthEmail).where(
-            AuthEmail.email == email
+            func.lower(AuthEmail.email) == normalized_email
         )
-
-
         if lock:
-            query  = query.with_for_update()
+            query = query.with_for_update()
 
         result = await db.execute(query)
         return result.scalar_one_or_none()
 
-
-
-    
     @staticmethod
-    async def get_primary_account_by_id(
-        db : AsyncSession,
-        id : AuthEmail,
-        lock : bool = False
-    ) -> AuthEmail | None:
-        query = select(AuthEmail).where(
-            AuthEmail.id == id,
-            AuthEmail.is_primary == True
+    async def list_by_account_id(
+        db: AsyncSession,
+        account_id: UUID,
+    ) -> list[AuthEmail]:
+        """List all email records owned by an account, oldest first."""
+        result = await db.execute(
+            select(AuthEmail)
+            .where(AuthEmail.account_id == account_id)
+            .order_by(AuthEmail.created_at.asc(), AuthEmail.id.asc())
         )
+        return list(result.scalars().all())
 
+    @staticmethod
+    async def get_primary_by_account_id(
+        db: AsyncSession,
+        account_id: UUID,
+        lock: bool = False,
+    ) -> AuthEmail | None:
+        """Find an account's primary email, or None if none is assigned.
 
+        The database enforces at most one primary email per account.
+        """
+        query = select(AuthEmail).where(
+            AuthEmail.account_id == account_id,
+            AuthEmail.is_primary.is_(True),
+        )
         if lock:
-            query  = query.with_for_update()
+            query = query.with_for_update()
 
         result = await db.execute(query)
         return result.scalar_one_or_none()
 
-
-
-
-    
     @staticmethod
     async def get_password_login_email(
-        db : AsyncSession,
-        id : AuthEmail,
-        lock : bool = False
+        db: AsyncSession,
+        email: str,
+        lock: bool = False,
     ) -> AuthEmail | None:
+        """Find a verified address enabled for password-based login.
+
+        This checks email eligibility only; the service must also verify the
+        password identity and account status on the primary database.
+        """
+        normalized_email = email.strip().lower()
         query = select(AuthEmail).where(
-            AuthEmail.id == id,
-            AuthEmail.password_login_enabled == True
+            func.lower(AuthEmail.email) == normalized_email,
+            AuthEmail.password_login_enabled.is_(True),
+            AuthEmail.verified_at.is_not(None),
         )
-    
-    
         if lock:
-            query  = query.with_for_update()
-    
+            query = query.with_for_update()
+
         result = await db.execute(query)
         return result.scalar_one_or_none()
-    
-
 
     @staticmethod
-    async def save(
-        db : AsyncSession,
-        email : AuthEmail
-    ) -> AuthEmail:
+    async def save(db: AsyncSession, email: AuthEmail) -> AuthEmail:
+        """Flush pending changes to an email ORM instance without committing.
+
+        Intended for records already associated with the supplied session;
+        this is not an upsert or replacement operation.
+        """
         db.add(email)
         await db.flush()
         return email
 
-
-
     @staticmethod
-    async def delete(
-        db : AsyncSession,
-        email : AuthEmail
-    ) -> None:
+    async def delete(db: AsyncSession, email: AuthEmail) -> None:
+        """Delete an email record and flush without committing.
+
+        The service decides whether deletion is allowed. Associated
+        verification challenges have a database-level CASCADE foreign key.
+        """
         await db.delete(email)
         await db.flush()
-        return None
-    
-
-
-
-
