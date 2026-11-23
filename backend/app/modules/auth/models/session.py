@@ -105,6 +105,6 @@ class AuthSession(BaseModel):
         "AuthAccount", back_populates="sessions"
     )
 
-    refresh_tokens: Mapped[AuthRefreshToken] = relationship(
+    refresh_tokens: Mapped[list[AuthRefreshToken]] = relationship(
         "AuthRefreshToken", back_populates="session"
     )
