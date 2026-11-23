@@ -87,7 +87,7 @@ class AuthVerificationChallenge(BaseModel):
     email_id: Mapped[UUID] = mapped_column(
         ForeignKey(
             "auth_email.id",
-            ondelete="RESTRICT",
+            ondelete="CASCADE",
         ),
         nullable=False,
     )
