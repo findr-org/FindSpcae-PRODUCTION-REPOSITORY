@@ -45,7 +45,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 from datetime import datetime
-from enum import Enum as PyEnum
 from uuid import UUID
 
 from sqlalchemy import (
@@ -60,15 +59,11 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.infrastructure.database.base import BaseModel
+from app.modules.auth.enums import VerificationPurpose
 
 
 if TYPE_CHECKING:
     from .email import AuthEmail
-
-
-class VerificationPurpose(str, PyEnum):
-    EMAIL_VERIFICATION = "email_verification"
-    PASSWORD_RESET = "password_reset"
 
 
 class AuthVerificationChallenge(BaseModel):

@@ -13,7 +13,8 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.modules.auth.models import AuthIdentity, AuthIdentityProviders
+from app.modules.auth.enums import AuthIdentityProviders
+from app.modules.auth.models import AuthIdentity
 
 
 class AuthIdentityRepository:

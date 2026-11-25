@@ -14,7 +14,8 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.modules.auth.models import AuthVerificationChallenge, VerificationPurpose
+from app.modules.auth.enums import VerificationPurpose
+from app.modules.auth.models import AuthVerificationChallenge
 
 
 class AuthVerificationChallengeRepository:

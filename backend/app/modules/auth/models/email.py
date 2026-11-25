@@ -39,7 +39,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 from uuid import UUID
-from enum import Enum as PyEnum
 from datetime import datetime
 
 from sqlalchemy import (
@@ -56,17 +55,12 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.infrastructure.database.base import BaseModel
+from app.modules.auth.enums import EmailSource
 
 
 if TYPE_CHECKING:
     from .account import AuthAccount
     from .challenge import AuthVerificationChallenge
-
-
-class EmailSource(str, PyEnum):
-    MANUAL = "manual"
-    GOOGLE = "google"
-    APPLE = "apple"
 
 
 class AuthEmail(BaseModel):

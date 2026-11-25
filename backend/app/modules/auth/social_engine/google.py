@@ -21,7 +21,7 @@ import hmac
 from jose import jwt
 from jose.exceptions import ExpiredSignatureError, JWTError
 
-from app.modules.auth.models.identity import AuthIdentityProviders
+from app.modules.auth.enums import AuthIdentityProviders
 from app.modules.auth.social_engine.base import BaseSocialProvider
 from app.modules.auth.social_engine.contracts import (
     SocialVerificationRequest,

@@ -1,44 +1,21 @@
-"""
-Public exports and ORM registration for findspace authentication models.
+"""Public model exports and ORM registration for findspace authentication.
 
-Importing this package registers all authentication models with
-SQLAlchemy's shared declarative metadata
-
-This module also exposes model classes and enums through a
-single import interface for services , schemas  and migrations
+Importing this package registers authentication models with SQLAlchemy's
+shared declarative metadata. Shared enums are defined in auth.enums.
 """
 
-from .account import AuthAccount, AccountType, AccountStatus
-
-
-from .email import AuthEmail, EmailSource
-
-
-from .identity import AuthIdentity, AuthIdentityProviders
-
-from .challenge import AuthVerificationChallenge, VerificationPurpose
-
-
-from .session import AuthSession
+from .account import AuthAccount
+from .challenge import AuthVerificationChallenge
+from .email import AuthEmail
+from .identity import AuthIdentity
 from .refresh_token import AuthRefreshToken
-
-
-# ==========================#
-# PUBLIC EXPORTS
-# ==========================#
+from .session import AuthSession
 
 __all__ = [
-    # Models
     "AuthAccount",
     "AuthEmail",
     "AuthIdentity",
     "AuthVerificationChallenge",
     "AuthSession",
     "AuthRefreshToken",
-    # Enums
-    "AccountType",
-    "AccountStatus",
-    "EmailSource",
-    "AuthIdentityProviders",
-    "VerificationPurpose",
 ]

@@ -31,31 +31,18 @@ Invariants:
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
-from enum import Enum as PyEnum
 
 from sqlalchemy import Enum as SQLEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.infrastructure.database.base import BaseModel
+from app.modules.auth.enums import AccountType, AccountStatus
 
 
 if TYPE_CHECKING:
     from .email import AuthEmail
     from .identity import AuthIdentity
     from .session import AuthSession
-
-
-class AccountType(str, PyEnum):
-    USER = "user"
-    STAFF = "staff"
-    ADMIN = "admin"
-
-
-class AccountStatus(str, PyEnum):
-    PENDING = "pending"
-    ACTIVE = "active"
-    SUSPENDED = "suspended"
-    DISABLED = "disabled"
 
 
 class AuthAccount(BaseModel):

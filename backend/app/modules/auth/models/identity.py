@@ -46,7 +46,6 @@ Invariants:
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
-from enum import Enum as PyEnum
 from uuid import UUID
 
 from sqlalchemy import (
@@ -59,18 +58,11 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.infrastructure.database.base import BaseModel
+from app.modules.auth.enums import AuthIdentityProviders
 
 
 if TYPE_CHECKING:
     from .account import AuthAccount
-
-
-class AuthIdentityProviders(str, PyEnum):
-    """States the multiple channels a user can use to authenticate."""
-
-    PASSWORD = "password"
-    GOOGLE = "google"
-    APPLE = "apple"
 
 
 class AuthIdentity(BaseModel):
