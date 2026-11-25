@@ -39,9 +39,7 @@ class AuthRefreshTokenRepository:
         lock: bool = False,
     ) -> AuthRefreshToken | None:
         """Find a refresh-token record by ID, optionally locking the row."""
-        query = select(AuthRefreshToken).where(
-            AuthRefreshToken.id == token_id
-        )
+        query = select(AuthRefreshToken).where(AuthRefreshToken.id == token_id)
         if lock:
             query = query.with_for_update()
 

@@ -58,9 +58,7 @@ class AuthEmailRepository:
         Return None when the address is not registered.
         """
         normalized_email = email.strip().lower()
-        query = select(AuthEmail).where(
-            func.lower(AuthEmail.email) == normalized_email
-        )
+        query = select(AuthEmail).where(func.lower(AuthEmail.email) == normalized_email)
         if lock:
             query = query.with_for_update()
 

@@ -71,13 +71,11 @@ class Settings(BaseSettings):
     DEFAULT_SESSION_DAYS: int = Field(default=7, gt=0)
     REMEMBER_ME_SESSION_DAYS: int = Field(default=30, gt=0)
 
-
-
-    #==============================#
-    #SOCIAL PROVIDER CONFIGURATION
-    #===============================#
-    GOOGLE_CLIENT_IDS : list[str]
-    APPLE_CLIENT_IDS : list[str]
+    # ==============================#
+    # SOCIAL PROVIDER CONFIGURATION
+    # ===============================#
+    GOOGLE_CLIENT_IDS: list[str]
+    APPLE_CLIENT_IDS: list[str]
 
     # ==========================#
     # CORS CONFIGURATION

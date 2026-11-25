@@ -1,7 +1,6 @@
-
-#==========================#
-#Base.py
-#==========================#
+# ==========================#
+# Base.py
+# ==========================#
 
 """
 Social Authentication Engine — Base Provider
@@ -66,20 +65,17 @@ apple.py      : Apple-specific verification implementation.
 exceptions.py : Standardized verification errors.
 """
 
-
-
 from __future__ import annotations
-from abc import ABC , abstractmethod
+from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .contracts import SocialVerificationRequest , VerifiedSocialIdentity
-
+    from .contracts import SocialVerificationRequest, VerifiedSocialIdentity
 
 
 class BaseSocialProvider(ABC):
-
     @abstractmethod
-    async def verify(self , request : SocialVerificationRequest) ->VerifiedSocialIdentity:
+    async def verify(
+        self, request: SocialVerificationRequest
+    ) -> VerifiedSocialIdentity:
         pass
-

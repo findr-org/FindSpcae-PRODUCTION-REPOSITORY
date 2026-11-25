@@ -1,4 +1,3 @@
-
 # ==========================#
 # Account.py
 # ==========================#
@@ -96,9 +95,7 @@ class AuthAccountRepository:
         Returns:
             The matching AuthAccount instance, or None if not found.
         """
-        query = select(AuthAccount).where(
-            AuthAccount.id == account_id
-        )
+        query = select(AuthAccount).where(AuthAccount.id == account_id)
 
         if lock:
             query = query.with_for_update()
