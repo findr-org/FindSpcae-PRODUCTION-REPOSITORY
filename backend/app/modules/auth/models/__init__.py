@@ -10,12 +10,14 @@ from .email import AuthEmail
 from .identity import AuthIdentity
 from .refresh_token import AuthRefreshToken
 from .session import AuthSession
+from .social_challenge import AuthSocialChallenge
 
 __all__ = [
     "AuthAccount",
     "AuthEmail",
     "AuthIdentity",
     "AuthVerificationChallenge",
+    "AuthSocialChallenge",
     "AuthSession",
     "AuthRefreshToken",
 ]
