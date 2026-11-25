@@ -89,9 +89,7 @@ class AppleProvider(BaseSocialProvider):
 
         kid = header.get("kid")
         if not isinstance(kid, str) or not kid:
-            raise InvalidSocialTokenError(
-                "Missing Apple signing key identifier"
-            )
+            raise InvalidSocialTokenError("Missing Apple signing key identifier")
 
         # This JWKSClient must be initialized with APPLE_JWKS_URL by
         # the application's dependency-configuration layer.
@@ -113,25 +111,16 @@ class AppleProvider(BaseSocialProvider):
                 },
             )
         except ExpiredSignatureError as exc:
-            raise ExpiredSocialTokenError(
-                "Apple ID token has expired"
-            ) from exc
+            raise ExpiredSocialTokenError("Apple ID token has expired") from exc
         except JWTError as exc:
-            raise InvalidSocialTokenError(
-                "Apple ID token verification failed"
-            ) from exc
+            raise InvalidSocialTokenError("Apple ID token verification failed") from exc
 
         # Native Apple ID tokens identify the app by its Bundle ID.
         # An Apple Services ID may be allowed for a separately configured
         # web flow. Never accept arbitrary audiences from the request.
         audience = claims.get("aud")
-        if (
-            not isinstance(audience, str)
-            or audience not in self._allowed_client_ids
-        ):
-            raise InvalidSocialTokenError(
-                "Apple token was not issued for findspace"
-            )
+        if not isinstance(audience, str) or audience not in self._allowed_client_ids:
+            raise InvalidSocialTokenError("Apple token was not issued for findspace")
 
         if request.expected_nonce is not None:
             expected_nonce = request.expected_nonce
@@ -146,19 +135,11 @@ class AppleProvider(BaseSocialProvider):
                     expected_nonce.encode("utf-8"),
                 )
             ):
-                raise InvalidSocialTokenError(
-                    "Apple token nonce verification failed"
-                )
+                raise InvalidSocialTokenError("Apple token nonce verification failed")
 
         subject = claims.get("sub")
-        if (
-            not isinstance(subject, str)
-            or not subject
-            or len(subject) > 255
-        ):
-            raise InvalidSocialTokenError(
-                "Invalid Apple account identifier"
-            )
+        if not isinstance(subject, str) or not subject or len(subject) > 255:
+            raise InvalidSocialTokenError("Invalid Apple account identifier")
 
         email = claims.get("email")
         if not isinstance(email, str) or not email.strip():

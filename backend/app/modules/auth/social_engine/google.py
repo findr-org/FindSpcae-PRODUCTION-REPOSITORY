@@ -74,7 +74,6 @@ class GoogleProvider(BaseSocialProvider):
             client_id.strip() for client_id in allowed_clients_ids
         )
 
-
     async def verify(
         self,
         request: SocialVerificationRequest,
@@ -142,7 +141,9 @@ class GoogleProvider(BaseSocialProvider):
             raise ExpiredSocialTokenError("Google ID token has expired") from exc
 
         except JWTError as exc:
-            raise InvalidSocialTokenError("Google ID token verification failed") from exc
+            raise InvalidSocialTokenError(
+                "Google ID token verification failed"
+            ) from exc
 
         # Validate audience against findspace's trusted client IDs.
         # python-jose accepts one expected audience string,

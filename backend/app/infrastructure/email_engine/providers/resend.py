@@ -53,9 +53,7 @@ class ResendProvider(BaseEmailProvider):
         self._api_key = api_key
         self._timeout = httpx.Timeout(timeout_seconds)
 
-    async def send(
-        self, request: EmailRequest, sender: EmailSender
-    ) -> EmailSubmission:
+    async def send(self, request: EmailRequest, sender: EmailSender) -> EmailSubmission:
         payload: dict[str, str | list[str]] = {
             "from": f"{sender.name} <{sender.address}>",
             "to": [request.recipient],
@@ -75,7 +73,9 @@ class ResendProvider(BaseEmailProvider):
                 follow_redirects=False,
             )
         except httpx.RequestError:
-            raise EmailSubmissionUnknownError("Resend submission outcome is unknown") from None
+            raise EmailSubmissionUnknownError(
+                "Resend submission outcome is unknown"
+            ) from None
 
         if response.status_code == 429:
             raise EmailRateLimitedError(429)
@@ -87,7 +87,9 @@ class ResendProvider(BaseEmailProvider):
         try:
             data = response.json()
         except ValueError:
-            raise EmailSubmissionUnknownError("Invalid Resend acceptance receipt") from None
+            raise EmailSubmissionUnknownError(
+                "Invalid Resend acceptance receipt"
+            ) from None
 
         message_id = data.get("id") if isinstance(data, dict) else None
         if not isinstance(message_id, str) or not message_id.strip():

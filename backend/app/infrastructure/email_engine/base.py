@@ -29,7 +29,5 @@ class BaseEmailProvider(ABC):
     """Submit a resolved message and return a normalized acceptance receipt."""
 
     @abstractmethod
-    async def send(
-        self, request: EmailRequest, sender: EmailSender
-    ) -> EmailSubmission:
+    async def send(self, request: EmailRequest, sender: EmailSender) -> EmailSubmission:
         raise NotImplementedError
