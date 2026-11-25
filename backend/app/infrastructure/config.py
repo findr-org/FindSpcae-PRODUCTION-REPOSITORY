@@ -12,6 +12,7 @@ from urllib.parse import urlsplit
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import ArgumentError
 from typing import Literal
+from app.infrastructure.email_engine.enums import EmailProviderType
 from enum import Enum as PyEnum
 from functools import lru_cache
 from pathlib import Path
@@ -78,10 +79,47 @@ class Settings(BaseSettings):
     APPLE_CLIENT_IDS: list[str]
 
     # ==========================#
+    # EMAIL CONFIGURATION
+    # ==========================#
+    EMAIL_PROVIDER: EmailProviderType = EmailProviderType.RESEND
+    RESEND_API_KEY: SecretStr = Field(..., min_length=1)
+    EMAIL_SECURITY_SENDER: str
+    EMAIL_SECURITY_SENDER_NAME: str = "findspace Security"
+    EMAIL_NOTIFICATIONS_SENDER: str
+    EMAIL_NOTIFICATIONS_SENDER_NAME: str = "findspace Notifications"
+    EMAIL_TIMEOUT_SECONDS: float = Field(default=10, gt=0, le=60)
+
+    # ==========================#
     # CORS CONFIGURATION
     # ==========================#
 
     ALLOWED_ORIGINS: list[str] = Field(default_factory=list)
+
+    @field_validator("RESEND_API_KEY")
+    @classmethod
+    def validate_resend_key(cls, value: SecretStr) -> SecretStr:
+        if not value.get_secret_value().strip():
+            raise ValueError("RESEND_API_KEY must not be blank")
+        return value
+
+    @field_validator("EMAIL_SECURITY_SENDER", "EMAIL_NOTIFICATIONS_SENDER")
+    @classmethod
+    def validate_email_sender(cls, value: str) -> str:
+        value = value.strip()
+        if (
+            value.count("@") != 1
+            or not all(value.split("@"))
+            or any(char.isspace() or char in "<>,;" for char in value)
+        ):
+            raise ValueError("Sender must be a bare email address")
+        return value
+
+    @field_validator("EMAIL_SECURITY_SENDER_NAME", "EMAIL_NOTIFICATIONS_SENDER_NAME")
+    @classmethod
+    def validate_email_sender_name(cls, value: str) -> str:
+        if not value.strip() or any(char in value for char in "\r\n<>"):
+            raise ValueError("Invalid sender display name")
+        return value.strip()
 
     @field_validator("PRIMARY_DATABASE_URL", "READ_DATABASE_URL", mode="before")
     @classmethod
