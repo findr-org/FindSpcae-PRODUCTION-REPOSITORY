@@ -30,7 +30,8 @@ if not primary_database_url:
 
 primary_engine = create_async_engine(
     url=primary_database_url,
-    echo=settings.ENV == "dev",
+    echo=False,
+    hide_parameters=True,
     pool_pre_ping=True,
     max_overflow=settings.DB_MAX_OVERFLOW,
     pool_timeout=settings.DB_POOL_TIMEOUT_SECONDS,
@@ -45,7 +46,8 @@ read_engine = (
     if read_database_url is None or read_database_url == primary_database_url
     else create_async_engine(
         url=read_database_url,
-        echo=settings.ENV == "dev",
+        echo=False,
+        hide_parameters=True,
         pool_pre_ping=True,
         max_overflow=settings.DB_MAX_OVERFLOW,
         pool_timeout=settings.DB_POOL_TIMEOUT_SECONDS,
