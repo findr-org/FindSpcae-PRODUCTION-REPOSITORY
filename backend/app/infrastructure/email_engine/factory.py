@@ -1,4 +1,25 @@
-"""Compose the email engine from deployment settings and a shared HTTP client."""
+# ==========================#
+# Factory.py
+# ==========================#
+
+"""
+Email Engine — Composition Factory
+==================================
+
+Purpose
+-------
+Constructs the email engine from application settings and an injected HTTP client.
+
+Responsibilities
+----------------
+Registers the Resend transport, applies the configured provider and timeout,
+and maps SECURITY and NOTIFICATIONS to their configured sender identities.
+
+Boundaries
+----------
+Does not own or close the HTTP client, perform network requests, or initialize
+global engine instances. Application startup owns the client lifecycle.
+"""
 
 from __future__ import annotations
 

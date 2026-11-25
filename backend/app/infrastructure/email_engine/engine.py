@@ -1,8 +1,25 @@
-"""Provider-independent email submission and sender resolution.
+# ==========================#
+# Engine.py
+# ==========================#
 
-Business services choose message content and logical sender categories.
-The engine selects the configured transport and resolves sender identities.
-It does not generate OTPs, manage transactions, or guarantee inbox delivery.
+"""
+Email Engine — Delivery Engine
+==============================
+
+Purpose
+-------
+Acts as the provider-independent entry point for outgoing transactional email.
+
+Responsibilities
+----------------
+Selects the configured provider during initialization, resolves logical sender
+categories to configured identities, validates recipient, subject and body,
+and delegates each submission once to the selected transport.
+
+Boundaries
+----------
+Does not generate OTPs, compose business messages, manage database transactions,
+retry ambiguous submissions, or guarantee inbox delivery.
 """
 
 from collections.abc import Mapping

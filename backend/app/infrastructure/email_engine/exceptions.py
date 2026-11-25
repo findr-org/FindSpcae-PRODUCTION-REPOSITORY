@@ -1,4 +1,25 @@
-"""Normalized delivery errors; never include message bodies or API credentials."""
+# ==========================#
+# Exceptions.py
+# ==========================#
+
+"""
+Email Engine — Exceptions
+=========================
+
+Purpose
+-------
+Defines normalized failures exposed by the email infrastructure to its callers.
+
+Responsibilities
+----------------
+Distinguishes configuration and request errors, explicit provider rejection,
+rate limiting, and uncertain submission outcomes. An uncertain outcome means
+acceptance could not be established and must not trigger blind retries.
+
+Boundaries
+----------
+Exception messages must not expose API credentials, OTPs or message bodies.
+"""
 
 
 class EmailEngineError(Exception):

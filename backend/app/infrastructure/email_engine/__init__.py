@@ -1,4 +1,24 @@
-"""Public interface for provider-independent transactional email delivery."""
+# ==========================#
+# __init__.py
+# ==========================#
+
+"""
+Email Engine — Public Interface
+===============================
+
+Purpose
+-------
+Provides the stable import interface for business services and application startup.
+
+Responsibilities
+----------------
+Exports the engine, request and submission contracts, sender and provider enums,
+normalized exceptions, and the composition factory.
+
+Boundaries
+----------
+Does not initialize clients, read settings, or submit messages.
+"""
 
 from .contracts import EmailRequest, EmailSubmission
 from .engine import EmailEngine

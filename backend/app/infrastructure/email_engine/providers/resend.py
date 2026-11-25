@@ -1,4 +1,26 @@
-"""Resend REST transport using an application-owned asynchronous HTTP client."""
+# ==========================#
+# Resend.py
+# ==========================#
+
+"""
+Email Engine — Resend Provider
+==============================
+
+Purpose
+-------
+Implements the shared email transport contract using Resend's REST API.
+
+Responsibilities
+----------------
+Builds the provider payload, authenticates with a Bearer API key, submits via
+an injected HTTPX AsyncClient to POST https://api.resend.com/emails, and
+normalizes the response into an acceptance receipt or infrastructure exception.
+
+Boundaries
+----------
+Does not use the Resend SDK, own the HTTP client, select sender categories,
+log sensitive message content, or automatically retry ambiguous submissions.
+"""
 
 import httpx
 
