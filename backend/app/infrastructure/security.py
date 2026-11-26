@@ -77,7 +77,7 @@ def verify_refresh_token(refresh_token: str, hashed_refresh_token: str) -> bool:
 
 def create_access_token(
     data: dict,
-    expires_delta: timedelta | None = None,
+    expires_delta: timedelta,
     *,
     session_jti: str | None = None,
     token_jti: str | None = None,
@@ -93,15 +93,7 @@ def create_access_token(
 
     to_encode = data.copy()
 
-    expire = datetime.now(timezone.utc) + (
-        expires_delta
-        if expires_delta is not None
-        else timedelta(
-            minutes=(
-                60 if settings.ENV == "dev" else settings.ACCESS_TOKEN_EXPIRE_MINUTES
-            )
-        )
-    )
+    expire = datetime.now(timezone.utc) + expires_delta
 
     to_encode.update(
         {

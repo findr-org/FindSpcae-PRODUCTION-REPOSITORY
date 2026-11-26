@@ -70,6 +70,7 @@ class SessionCreateRequest(InputBase):
     account_id : UUID
     device_name : str | None = Field(max_length=120 , default=None)
     user_agent : str | None = Field(max_length=512 , default=None)
+    remember_me : bool = False
 
 
 
@@ -80,3 +81,8 @@ class TokenPairResponse(OutputBase):
     session_id : UUID
     expires_in : int = Field(gt=0)
     session_expires_at : datetime
+
+
+
+class SessionRefreshRequest(InputBase):
+    refresh_token : str = Field(max_length = 512)

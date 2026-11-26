@@ -46,3 +46,348 @@ Invariants:
 - Session revocation must not delete token rotation history.
 - Services must remain independent of HTTP and authorization policies.
 """
+
+from __future__ import annotations
+
+from datetime import datetime, timezone, timedelta
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.modules.auth.models import (
+    AuthSession,
+    AuthRefreshToken,
+)
+from app.modules.auth.enums import AccountStatus
+from app.modules.auth.repositories import (
+    AuthSessionRepository,
+    AuthAccountRepository,
+    AuthRefreshTokenRepository,
+)
+from app.modules.auth.schemas import (
+    SessionCreateRequest,
+    TokenPairResponse,
+    SessionRefreshRequest
+)
+from app.modules.auth.services.exceptions import (
+    AccountInactiveError,
+    AccountNotFoundError,
+    InvalidRefreshTokenError,
+    SessionNotFoundError,
+    SessionRevokedError,
+    SessionExpiredError,
+    TokenReuseDetectionError
+)
+
+from app.infrastructure.logging import get_logger
+from app.infrastructure.config import settings
+from app.infrastructure.security import (
+    create_access_token,
+    generate_refresh_token,
+    hash_refresh_token,
+)
+
+logger = get_logger(__name__)
+
+class SessionService:
+    """
+    Orchestrates the lifecycle of authentication sessions,
+    including session creation, validation, renewal,
+    token issuance, and revocation.
+    """
+
+    @staticmethod
+    async def create_session(
+        db: AsyncSession,
+        payload: SessionCreateRequest,
+    ) -> TokenPairResponse:
+
+        authenticated_account = await AuthAccountRepository.get_by_id(
+            db=db,
+            account_id=payload.account_id,
+            lock=True,
+        )
+
+        if authenticated_account is None:
+            raise AccountNotFoundError(
+                "Auth account not found or does not exist"
+            )
+
+        if authenticated_account.status != AccountStatus.ACTIVE: 
+            raise AccountInactiveError("Auth account is inactive")
+
+        session_days = (
+            settings.REMEMBER_ME_SESSION_DAYS
+            if payload.remember_me
+            else settings.DEFAULT_SESSION_DAYS
+        )
+
+        now = datetime.now(timezone.utc)
+
+        expires_at = now + timedelta(days=session_days)
+
+        session = AuthSession(
+            account_id=authenticated_account.id,
+            last_activity_at=now,
+            expires_at=expires_at,
+            device_name=payload.device_name,
+            user_agent=payload.user_agent,
+        )
+
+        session = await AuthSessionRepository.create(
+            db=db,
+            session=session,
+        )
+
+        generated_refresh_token = generate_refresh_token()
+
+        hashed_token = hash_refresh_token(generated_refresh_token)
+
+        refresh_token = AuthRefreshToken(
+            session_id=session.id,
+            token_hash=hashed_token,
+            expires_at=session.expires_at,
+        )
+
+        await AuthRefreshTokenRepository.create(
+            db=db,
+            token=refresh_token,
+        )
+
+        claims = {
+            "sub": str(authenticated_account.id),
+            "sid": str(session.id),
+        }
+
+        access_token_duration = timedelta(
+            minutes=(
+                60
+                if settings.ENV == "dev"
+                else settings.ACCESS_TOKEN_EXPIRE_MINUTES
+            )
+        )
+
+        access_token = create_access_token(
+            claims,
+            expires_delta=access_token_duration,
+        )
+
+        token_pair_response = TokenPairResponse(
+            access_token=access_token,
+            refresh_token=generated_refresh_token,
+            session_id=session.id,
+            expires_in=int(access_token_duration.total_seconds()),
+            session_expires_at=session.expires_at,
+        )
+
+        logger.info(
+            "Session prepared successfully | session_id=%s | account_id=%s",
+            session.id,
+            authenticated_account.id,
+        )
+
+        return token_pair_response
+
+
+    @staticmethod
+    async def refresh_session(
+        db: AsyncSession,
+        payload: SessionRefreshRequest,
+    ) -> TokenPairResponse:
+
+        refresh_token = payload.refresh_token
+
+        hashed_token = hash_refresh_token(refresh_token)
+
+        token_record = await AuthRefreshTokenRepository.get_by_hash(
+            db=db,
+            token_hash=hashed_token,
+            lock=False,
+        )
+
+        if token_record is None:
+            raise InvalidRefreshTokenError("Refresh token is invalid")
+
+        session = await AuthSessionRepository.get_by_id(
+            db=db,
+            session_id=token_record.session_id,
+            lock=False,
+        )
+
+        if session is None:
+            raise SessionNotFoundError("Session does not exist")
+
+        # Acquire account lock
+
+        account = await AuthAccountRepository.get_by_id(
+            db=db,
+            account_id=session.account_id,
+            lock=True,
+        )
+
+        if account is None:
+            raise AccountNotFoundError("Account does not exist")
+
+        # Acquire session lock
+
+        session = await AuthSessionRepository.get_by_id(
+            db=db,
+            session_id=session.id,
+            lock=True,
+        )
+
+        if session is None:
+            raise SessionNotFoundError("Session does not exist")
+
+        # Acquire refresh token lock
+
+        token_record = await AuthRefreshTokenRepository.get_by_hash(
+            db=db,
+            token_hash=hashed_token,
+            lock=True,
+        )
+
+        if token_record is None:
+            raise InvalidRefreshTokenError("Refresh token is invalid")
+
+        now = datetime.now(timezone.utc)
+
+        # Validate record associations
+
+        if (
+            session.account_id != account.id
+            or token_record.session_id != session.id
+        ):
+            raise InvalidRefreshTokenError("Refresh token is invalid")
+
+        # Validate account and session eligibility
+
+        if account.status != AccountStatus.ACTIVE:
+            raise AccountInactiveError("Account is inactive")
+
+        if session.revoked_at is not None:
+            raise SessionRevokedError("Session has been revoked")
+
+        if session.expires_at <= now:
+            raise SessionExpiredError("Session has expired")
+
+        # Detect refresh token reuse
+
+        if token_record.consumed_at is not None:
+            session.revoked_at = now
+
+            await AuthSessionRepository.save(
+                db=db,
+                session=session,
+            )
+
+            logger.warning(
+                "Refresh token reuse detected | session_id=%s | account_id=%s",
+                session.id,
+                account.id,
+            )
+
+            raise TokenReuseDetectionError(
+                "Refresh token reuse detected"
+            )
+
+        # Validate refresh token expiration
+
+        if token_record.expires_at <= now:
+            raise InvalidRefreshTokenError("Refresh token has expired")
+
+        # Recover original sliding session duration
+
+        original_session_duration = (
+            session.expires_at - session.last_activity_at
+        )
+
+        # Consume the existing refresh token
+
+        token_record.consumed_at = now
+
+        await AuthRefreshTokenRepository.save(
+            db=db,
+            token=token_record,
+        )
+
+        # Extend session expiration
+
+        session.last_activity_at = now
+        session.expires_at = now + original_session_duration
+
+        await AuthSessionRepository.save(
+            db=db,
+            session=session,
+        )
+
+        # Generate replacement refresh token
+
+        generated_refresh_token = generate_refresh_token()
+
+        hashed_refresh_token = hash_refresh_token(
+            generated_refresh_token
+        )
+
+        new_refresh_token = AuthRefreshToken(
+            session_id=session.id,
+            token_hash=hashed_refresh_token,
+            expires_at=session.expires_at,
+        )
+
+        await AuthRefreshTokenRepository.create(
+            db=db,
+            token=new_refresh_token,
+        )
+
+        # Generate replacement access token
+
+        claims = {
+            "sub": str(account.id),
+            "sid": str(session.id),
+        }
+
+        access_token_duration = timedelta(
+            minutes=(
+                60
+                if settings.ENV == "dev"
+                else settings.ACCESS_TOKEN_EXPIRE_MINUTES
+            )
+        )
+
+        remaining_session_duration = (
+            session.expires_at - datetime.now(timezone.utc)
+        )
+
+        expires_in = int(
+            min(
+                access_token_duration,
+                remaining_session_duration,
+            ).total_seconds()
+        )
+
+        if expires_in <= 0:
+            raise SessionExpiredError("Session has expired")
+
+        access_token = create_access_token(
+            claims,
+            expires_delta=timedelta(seconds=expires_in),
+        )
+
+        # Construct token response
+
+        token_pair_response = TokenPairResponse(
+            access_token=access_token,
+            refresh_token=generated_refresh_token,
+            session_id=session.id,
+            expires_in=expires_in,
+            session_expires_at=session.expires_at,
+        )
+
+        logger.info(
+            "Session renewal prepared | session_id=%s | account_id=%s",
+            session.id,
+            account.id,
+        )
+
+        return token_pair_response
+

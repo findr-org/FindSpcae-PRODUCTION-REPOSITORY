@@ -6,7 +6,8 @@
 
 from app.modules.auth.schemas.session import (
     SessionCreateRequest,
-    TokenPairResponse
+    TokenPairResponse,
+    SessionRefreshRequest
 )
 
 
@@ -14,5 +15,6 @@ from app.modules.auth.schemas.session import (
 
 __all__ = [
     "SessionCreateRequest",
-    "TokenPairResponse"
+    "TokenPairResponse",
+    "SessionRefreshRequest"
 ]
