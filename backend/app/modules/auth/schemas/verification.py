@@ -47,13 +47,16 @@ Invariants:
 - Unexpected input and output fields must be rejected.
 - Schemas must remain independent of HTTP transport details.
 """
+
 from __future__ import annotations
+
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel , ConfigDict
+from pydantic import BaseModel, ConfigDict
 
 from app.modules.auth.enums import VerificationPurpose
+
 
 class InputBase(BaseModel):
     model_config = ConfigDict(
@@ -68,16 +71,14 @@ class OutputBase(BaseModel):
     )
 
 
-
 class VerificationChallengeIssueRequest(InputBase):
-    email_id : UUID
-    purpose : VerificationPurpose
-
+    email_id: UUID
+    purpose: VerificationPurpose
 
 
 class VerificationChallengeResponse(OutputBase):
-    challenge_id : UUID
-    email_id : UUID
-    purpose : VerificationPurpose
-    expires_at : datetime
-    resend_available_at : datetime
+    challenge_id: UUID
+    email_id: UUID
+    purpose: VerificationPurpose
+    expires_at: datetime
+    resend_available_at: datetime

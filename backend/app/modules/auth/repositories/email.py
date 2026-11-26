@@ -41,7 +41,7 @@ class AuthEmailRepository:
         """
         query = select(AuthEmail).where(AuthEmail.id == email_id)
         if lock:
-            query = query.with_for_update()
+            query = query.with_for_update().execution_options(populate_existing=True)
 
         result = await db.execute(query)
         return result.scalar_one_or_none()
@@ -60,7 +60,7 @@ class AuthEmailRepository:
         normalized_email = email.strip().lower()
         query = select(AuthEmail).where(func.lower(AuthEmail.email) == normalized_email)
         if lock:
-            query = query.with_for_update()
+            query = query.with_for_update().execution_options(populate_existing=True)
 
         result = await db.execute(query)
         return result.scalar_one_or_none()
@@ -93,7 +93,7 @@ class AuthEmailRepository:
             AuthEmail.is_primary.is_(True),
         )
         if lock:
-            query = query.with_for_update()
+            query = query.with_for_update().execution_options(populate_existing=True)
 
         result = await db.execute(query)
         return result.scalar_one_or_none()
@@ -116,7 +116,7 @@ class AuthEmailRepository:
             AuthEmail.verified_at.is_not(None),
         )
         if lock:
-            query = query.with_for_update()
+            query = query.with_for_update().execution_options(populate_existing=True)
 
         result = await db.execute(query)
         return result.scalar_one_or_none()

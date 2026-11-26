@@ -60,11 +60,9 @@ Invariants:
   assumed to form a single atomic transaction.
 """
 
-
-
 from __future__ import annotations
 
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -111,7 +109,8 @@ class VerificationService:
 
         The caller owns the database transaction.
 
-        Email composition and delivery are currently deferred.
+        Email composition and delivery are currently deferred;
+        this method must not be exposed to real users until implemented.
         """
 
         # Retrieve and lock the authentication email.
@@ -220,6 +219,7 @@ class VerificationService:
         # Submit the prepared message through email_engine.
         # Translate email engine exceptions into ApplicationError.
         # Never log or expose the plaintext verification code.
+        # The email_engine dependency is intentionally unused until then.
 
         # Calculate when another challenge may be requested.
         resend_available_at = (

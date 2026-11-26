@@ -98,7 +98,6 @@ class Settings(BaseSettings):
     OTP_MAX_ATTEMPTS: int = Field(default=5, gt=0)
     OTP_RESEND_COOLDOWN_SECONDS: int = Field(default=60, gt=0)
 
-
     # ==========================#
     # CORS CONFIGURATION
     # ==========================#

@@ -9,11 +9,9 @@ uses only the supplied AsyncSession and never commits or chooses an engine.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Callable
 from uuid import UUID
 
-from sqlalchemy import select , update
-from sqlalchemy.engine.result import scalar_one_or_none
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.auth.enums import VerificationPurpose
@@ -44,7 +42,7 @@ class AuthVerificationChallengeRepository:
             AuthVerificationChallenge.id == challenge_id
         )
         if lock:
-            query = query.with_for_update()
+            query = query.with_for_update().execution_options(populate_existing=True)
 
         result = await db.execute(query)
         return result.scalar_one_or_none()
@@ -78,7 +76,7 @@ class AuthVerificationChallengeRepository:
             .limit(1)
         )
         if lock:
-            query = query.with_for_update()
+            query = query.with_for_update().execution_options(populate_existing=True)
 
         result = await db.execute(query)
         return result.scalar_one_or_none()
@@ -106,7 +104,7 @@ class AuthVerificationChallengeRepository:
             .order_by(AuthVerificationChallenge.created_at.desc())
         )
         if lock:
-            query = query.with_for_update()
+            query = query.with_for_update().execution_options(populate_existing=True)
 
         result = await db.execute(query)
         return list(result.scalars().all())
@@ -134,26 +132,28 @@ class AuthVerificationChallengeRepository:
         await db.delete(challenge)
         await db.flush()
 
-
     @staticmethod
     async def get_latest_by_email_and_purpose(
-        db : AsyncSession,
-        email_id : UUID,
-        purpose : VerificationPurpose
+        db: AsyncSession,
+        email_id: UUID,
+        purpose: VerificationPurpose,
     ) -> AuthVerificationChallenge | None:
-        query = select(AuthVerificationChallenge).where(
-            AuthVerificationChallenge.email_id == email_id,
-            AuthVerificationChallenge.purpose == purpose
-        ).order_by(
-            AuthVerificationChallenge.created_at.desc(),
-            AuthVerificationChallenge.id.desc()
-        ).limit(1)
-
-
+        """Get the newest challenge regardless of its lifecycle state."""
+        query = (
+            select(AuthVerificationChallenge)
+            .where(
+                AuthVerificationChallenge.email_id == email_id,
+                AuthVerificationChallenge.purpose == purpose,
+            )
+            .order_by(
+                AuthVerificationChallenge.created_at.desc(),
+                AuthVerificationChallenge.id.desc(),
+            )
+            .limit(1)
+            .execution_options(populate_existing=True)
+        )
         result = await db.execute(query)
         return result.scalar_one_or_none()
-
-
 
     @staticmethod
     async def update_invalidated_at_by_ids(
@@ -161,6 +161,7 @@ class AuthVerificationChallengeRepository:
         challenge_ids: list[UUID],
         invalidated_at: datetime,
     ) -> int:
+        """Bulk-update eligible challenges and return the affected count."""
         if not challenge_ids:
             return 0
 
@@ -173,6 +174,7 @@ class AuthVerificationChallengeRepository:
             )
             .values(invalidated_at=invalidated_at)
             .returning(AuthVerificationChallenge.id)
+            .execution_options(synchronize_session="fetch")
         )
 
         result = await db.execute(query)
