@@ -9,9 +9,11 @@ uses only the supplied AsyncSession and never commits or chooses an engine.
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any, Callable
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import select , update
+from sqlalchemy.engine.result import scalar_one_or_none
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.auth.enums import VerificationPurpose
@@ -131,3 +133,48 @@ class AuthVerificationChallengeRepository:
         """Delete a challenge for controlled cleanup, without committing."""
         await db.delete(challenge)
         await db.flush()
+
+
+    @staticmethod
+    async def get_latest_by_email_and_purpose(
+        db : AsyncSession,
+        email_id : UUID,
+        purpose : VerificationPurpose
+    ) -> AuthVerificationChallenge | None:
+        query = select(AuthVerificationChallenge).where(
+            AuthVerificationChallenge.email_id == email_id,
+            AuthVerificationChallenge.purpose == purpose
+        ).order_by(
+            AuthVerificationChallenge.created_at.desc(),
+            AuthVerificationChallenge.id.desc()
+        ).limit(1)
+
+
+        result = await db.execute(query)
+        return result.scalar_one_or_none()
+
+
+
+    @staticmethod
+    async def update_invalidated_at_by_ids(
+        db: AsyncSession,
+        challenge_ids: list[UUID],
+        invalidated_at: datetime,
+    ) -> int:
+        if not challenge_ids:
+            return 0
+
+        query = (
+            update(AuthVerificationChallenge)
+            .where(
+                AuthVerificationChallenge.id.in_(challenge_ids),
+                AuthVerificationChallenge.consumed_at.is_(None),
+                AuthVerificationChallenge.invalidated_at.is_(None),
+            )
+            .values(invalidated_at=invalidated_at)
+            .returning(AuthVerificationChallenge.id)
+        )
+
+        result = await db.execute(query)
+
+        return len(result.scalars().all())

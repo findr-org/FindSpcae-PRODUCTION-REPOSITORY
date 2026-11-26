@@ -90,6 +90,16 @@ class Settings(BaseSettings):
     EMAIL_TIMEOUT_SECONDS: float = Field(default=10, gt=0, le=60)
 
     # ==========================#
+    # OTP CONFIGURATION
+    # ==========================#
+
+    OTP_LENGTH: int = Field(default=6, ge=6, le=8)
+    OTP_EXPIRE_MINUTES: int = Field(default=10, gt=0)
+    OTP_MAX_ATTEMPTS: int = Field(default=5, gt=0)
+    OTP_RESEND_COOLDOWN_SECONDS: int = Field(default=60, gt=0)
+
+
+    # ==========================#
     # CORS CONFIGURATION
     # ==========================#
 

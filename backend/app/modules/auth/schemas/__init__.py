@@ -18,7 +18,13 @@ from app.modules.auth.schemas.session import (
     SessionListResponse,
 )
 
+from app.modules.auth.schemas.verification import(
+    VerificationChallengeResponse,
+    VerificationChallengeIssueRequest
+)
 __all__ = [
+
+    #session
     "SessionCreateRequest",
     "TokenPairResponse",
     "SessionRefreshRequest",
@@ -32,4 +38,9 @@ __all__ = [
     "SessionListRequest",
     "SessionResponse",
     "SessionListResponse",
+
+
+    #verification
+    "VerificationChallengeResponse",
+    "VerificationChallengeIssueRequest"
 ]
