@@ -11,7 +11,7 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import select , update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.auth.models import AuthSession
@@ -105,3 +105,32 @@ class AuthSessionRepository:
         """
         await db.delete(session)
         await db.flush()
+
+
+
+    @staticmethod
+    async def update_revoked_at_by_account_id(
+        db: AsyncSession,
+        account_id: UUID,
+        revoked_time: datetime,
+        *,
+        exclude_session_id: UUID | None = None,
+    ) -> int:
+        query = (
+            update(AuthSession)
+            .where(
+                AuthSession.account_id == account_id,
+                AuthSession.revoked_at.is_(None),
+            )
+            .values(revoked_at=revoked_time)
+            .execution_options(synchronize_session="fetch")
+        )
+
+        if exclude_session_id is not None:
+            query = query.where(
+                AuthSession.id != exclude_session_id
+            )
+
+        result = await db.execute(query)
+
+        return result.rowcount  # type: ignore[attr-defined]

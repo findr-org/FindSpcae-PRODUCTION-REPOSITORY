@@ -7,7 +7,14 @@
 from app.modules.auth.schemas.session import (
     SessionCreateRequest,
     TokenPairResponse,
-    SessionRefreshRequest
+    SessionRefreshRequest,
+    SessionValidationRequest,
+    SessionValidationResponse,
+    SessionRevokeRequest,
+    SessionRevokeAllRequest,
+    SessionRevokeAllResponse,
+    SessionRevokeOtherRequest,
+    SessionRevokeOtherResponse
 )
 
 
@@ -16,5 +23,9 @@ from app.modules.auth.schemas.session import (
 __all__ = [
     "SessionCreateRequest",
     "TokenPairResponse",
-    "SessionRefreshRequest"
+    "SessionRefreshRequest",
+    "SessionValidationRequest",
+    "SessionValidationResponse",
+    "SessionRevokeRequest",
+    "SessionRevokeAllRequest"
 ]

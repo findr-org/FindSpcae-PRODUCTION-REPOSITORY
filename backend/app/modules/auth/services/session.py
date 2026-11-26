@@ -49,40 +49,43 @@ Invariants:
 
 from __future__ import annotations
 
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.modules.auth.models import (
-    AuthSession,
-    AuthRefreshToken,
-)
-from app.modules.auth.enums import AccountStatus
-from app.modules.auth.repositories import (
-    AuthSessionRepository,
-    AuthAccountRepository,
-    AuthRefreshTokenRepository,
-)
-from app.modules.auth.schemas import (
-    SessionCreateRequest,
-    TokenPairResponse,
-    SessionRefreshRequest
-)
+from app.infrastructure.config import settings
 from app.infrastructure.exceptions import (
+    REFRESH_TOKEN_REUSE,
     ApplicationError,
     ErrorCategory,
-    REFRESH_TOKEN_REUSE,
 )
-
 from app.infrastructure.logging import get_logger
-from app.infrastructure.config import settings
 from app.infrastructure.security import (
     create_access_token,
     generate_refresh_token,
     hash_refresh_token,
 )
+from app.modules.auth.enums import AccountStatus
+from app.modules.auth.models import AuthRefreshToken, AuthSession
+from app.modules.auth.repositories import (
+    AuthAccountRepository,
+    AuthRefreshTokenRepository,
+    AuthSessionRepository,
+)
+from app.modules.auth.schemas import (
+    SessionCreateRequest,
+    SessionRefreshRequest,
+    SessionRevokeAllRequest,
+    SessionRevokeAllResponse,
+    SessionRevokeRequest,
+    SessionValidationRequest,
+    SessionValidationResponse,
+    TokenPairResponse,
+)
+from backend.app.modules.auth.schemas.session import SessionRevokeOtherRequest
 
 logger = get_logger(__name__)
+
 
 class SessionService:
     """
@@ -96,7 +99,6 @@ class SessionService:
         db: AsyncSession,
         payload: SessionCreateRequest,
     ) -> TokenPairResponse:
-
         authenticated_account = await AuthAccountRepository.get_by_id(
             db=db,
             account_id=payload.account_id,
@@ -110,7 +112,7 @@ class SessionService:
                 message="Account does not exist",
             )
 
-        if authenticated_account.status != AccountStatus.ACTIVE: 
+        if authenticated_account.status != AccountStatus.ACTIVE:
             raise ApplicationError(
                 category=ErrorCategory.UNAUTHENTICATED,
                 code="ACCOUNT_INACTIVE",
@@ -189,13 +191,11 @@ class SessionService:
 
         return token_pair_response
 
-
     @staticmethod
     async def refresh_session(
         db: AsyncSession,
         payload: SessionRefreshRequest,
     ) -> TokenPairResponse:
-
         refresh_token = payload.refresh_token
 
         hashed_token = hash_refresh_token(refresh_token)
@@ -227,7 +227,6 @@ class SessionService:
             )
 
         # Acquire account lock
-
         account = await AuthAccountRepository.get_by_id(
             db=db,
             account_id=session.account_id,
@@ -242,7 +241,6 @@ class SessionService:
             )
 
         # Acquire session lock
-
         session = await AuthSessionRepository.get_by_id(
             db=db,
             session_id=session.id,
@@ -256,8 +254,7 @@ class SessionService:
                 message="Refresh token is invalid",
             )
 
-        # Acquire refresh token lock
-
+        # Acquire refresh-token lock
         token_record = await AuthRefreshTokenRepository.get_by_hash(
             db=db,
             token_hash=hashed_token,
@@ -274,7 +271,6 @@ class SessionService:
         now = datetime.now(timezone.utc)
 
         # Validate record associations
-
         if (
             session.account_id != account.id
             or token_record.session_id != session.id
@@ -286,7 +282,6 @@ class SessionService:
             )
 
         # Validate account and session eligibility
-
         if account.status != AccountStatus.ACTIVE:
             raise ApplicationError(
                 category=ErrorCategory.UNAUTHENTICATED,
@@ -308,9 +303,8 @@ class SessionService:
                 message="Session has expired",
             )
 
-        # Detect refresh token reuse. The outer refresh transaction must commit
+        # Detect refresh-token reuse. The outer refresh transaction must commit
         # the revocation before propagating the REFRESH_TOKEN_REUSE error.
-
         if token_record.consumed_at is not None:
             session.revoked_at = now
 
@@ -334,8 +328,7 @@ class SessionService:
                 message="Session is no longer valid",
             )
 
-        # Validate refresh token expiration
-
+        # Validate refresh-token expiration
         if token_record.expires_at <= now:
             raise ApplicationError(
                 category=ErrorCategory.UNAUTHENTICATED,
@@ -344,13 +337,11 @@ class SessionService:
             )
 
         # Recover original sliding session duration
-
         original_session_duration = (
             session.expires_at - session.last_activity_at
         )
 
         # Consume the existing refresh token
-
         token_record.consumed_at = now
 
         await AuthRefreshTokenRepository.save(
@@ -359,7 +350,6 @@ class SessionService:
         )
 
         # Extend session expiration
-
         session.last_activity_at = now
         session.expires_at = now + original_session_duration
 
@@ -369,7 +359,6 @@ class SessionService:
         )
 
         # Generate replacement refresh token
-
         generated_refresh_token = generate_refresh_token()
 
         hashed_refresh_token = hash_refresh_token(
@@ -388,7 +377,6 @@ class SessionService:
         )
 
         # Generate replacement access token
-
         claims = {
             "sub": str(account.id),
             "sid": str(session.id),
@@ -426,7 +414,6 @@ class SessionService:
         )
 
         # Construct token response
-
         token_pair_response = TokenPairResponse(
             access_token=access_token,
             refresh_token=generated_refresh_token,
@@ -443,3 +430,211 @@ class SessionService:
 
         return token_pair_response
 
+    @staticmethod
+    async def validate_session(
+        db: AsyncSession,
+        payload: SessionValidationRequest,
+    ) -> SessionValidationResponse:
+        session = await AuthSessionRepository.get_by_id(
+            db=db,
+            session_id=payload.session_id,
+        )
+
+        if session is None:
+            raise ApplicationError(
+                category=ErrorCategory.UNAUTHENTICATED,
+                code="INVALID_SESSION",
+                message="Session is invalid",
+            )
+
+        if session.account_id != payload.account_id:
+            raise ApplicationError(
+                category=ErrorCategory.UNAUTHENTICATED,
+                code="INVALID_SESSION",
+                message="Session is invalid",
+            )
+
+        if session.revoked_at is not None:
+            raise ApplicationError(
+                category=ErrorCategory.UNAUTHENTICATED,
+                code="SESSION_REVOKED",
+                message="Session has been revoked",
+            )
+
+        now = datetime.now(timezone.utc)
+
+        if session.expires_at <= now:
+            raise ApplicationError(
+                category=ErrorCategory.UNAUTHENTICATED,
+                code="SESSION_EXPIRED",
+                message="Session has expired",
+            )
+
+        account = await AuthAccountRepository.get_by_id(
+            db=db,
+            account_id=session.account_id,
+        )
+
+        if account is None:
+            raise ApplicationError(
+                category=ErrorCategory.UNAUTHENTICATED,
+                code="INVALID_SESSION",
+                message="Session is invalid",
+            )
+
+        if account.status != AccountStatus.ACTIVE:
+            raise ApplicationError(
+                category=ErrorCategory.UNAUTHENTICATED,
+                code="ACCOUNT_INACTIVE",
+                message="Account is inactive",
+            )
+
+        validation_response = SessionValidationResponse(
+            account_id=account.id,
+            session_id=session.id,
+            account_type=account.account_type,
+            session_expires_at=session.expires_at,
+        )
+
+        return validation_response
+
+    @staticmethod
+    async def revoke_session(
+        db: AsyncSession,
+        payload: SessionRevokeRequest,
+    ) -> None:
+        session = await AuthSessionRepository.get_by_id(
+            db=db,
+            session_id=payload.session_id,
+            lock=True,
+        )
+
+        if session is None:
+            raise ApplicationError(
+                category=ErrorCategory.NOT_FOUND,
+                code="SESSION_NOT_FOUND",
+                message="Session does not exist",
+            )
+
+        # Return immediately if the session has already been revoked.
+        if session.revoked_at is not None:
+            return None
+
+        # Prepare the session for revocation.
+        now = datetime.now(timezone.utc)
+
+        session.revoked_at = now
+
+        await AuthSessionRepository.save(
+            db=db,
+            session=session,
+        )
+
+        logger.info(
+            "Session revocation prepared | session_id=%s | account_id=%s",
+            session.id,
+            session.account_id,
+        )
+
+        return None
+
+    @staticmethod
+    async def revoke_all_sessions(
+        db: AsyncSession,
+        payload: SessionRevokeAllRequest,
+    ) -> SessionRevokeAllResponse:
+        account = await AuthAccountRepository.get_by_id(
+            db=db,
+            account_id=payload.account_id,
+            lock=True,
+        )
+
+        if account is None:
+            raise ApplicationError(
+                category=ErrorCategory.NOT_FOUND,
+                code="ACCOUNT_NOT_FOUND",
+                message="Account does not exist",
+            )
+
+        now = datetime.now(timezone.utc)
+
+        revoked_count = await AuthSessionRepository.update_revoked_at_by_account_id(
+            db=db,
+            account_id=account.id,
+            revoked_time=now,
+        )
+
+        logger.info(
+            "Bulk session revocation prepared | account_id=%s | revoked_count=%s",
+            account.id,
+            revoked_count,
+        )
+
+        revoke_all_response = SessionRevokeAllResponse(
+            account_id=account.id,
+            revoked_count=revoked_count,
+        )
+
+        return revoke_all_response
+
+
+
+    @staticmethod
+    async def revoke_other_sessions(
+        db : AsyncSession,
+        payload : SessionRevokeOtherRequest
+    ):
+
+        account = await AuthAccountRepository.get_by_id(
+            db = db ,
+            account_id = payload.account_id,
+            lock = True
+        )
+
+
+        if account is None:
+            raise ApplicationError(
+                category = ErrorCategory.NOT_FOUND,
+                message = "Acount does not exist",
+                code = "ACCOUNT_NOT_FOUND"
+            )
+
+
+        current_session = await AuthSessionRepository.get_by_id(
+            db = db,
+            session_id=payload.current_session_id
+            lock = True
+        )
+
+
+        if current_session is None:
+            raise ApplicationError(
+                category = ErrorCategory.UNAUTHENTICATED,
+                message = "Session is invalid",
+                code = "INVALID_SESSION"
+            )
+
+
+
+        now = datetime.now(timezone.utc)
+
+        if current_session.revoked_at is not None:
+            raise ApplicationError(
+                category = ErrorCategory.UNAUTHENTICATED,
+                code = "SESSION_REVOKED",
+                message = "Session has been revoked"
+            )
+
+        if current_session.expires_at <= now:
+            raise ApplicationError(
+                category = ErrorCategory.UNAUTHENTICATED,
+                code = "SESSION_EXPIRED",
+                message = "Session has expired"
+            )
+
+        
+
+
+
+
+        

@@ -51,6 +51,8 @@ from datetime import datetime
 from uuid import UUID
 from pydantic import BaseModel, ConfigDict , Field
 
+from backend.app.modules.auth.enums import AccountType
+
 
 class InputBase(BaseModel):
     model_config = ConfigDict(
@@ -86,3 +88,42 @@ class TokenPairResponse(OutputBase):
 
 class SessionRefreshRequest(InputBase):
     refresh_token : str = Field(max_length = 512)
+
+
+
+class SessionValidationRequest(InputBase):
+    account_id : UUID
+    session_id : UUID
+
+
+class SessionValidationResponse(OutputBase):
+    account_id : UUID
+    session_id : UUID
+    account_type : AccountType
+    session_expires_at : datetime
+
+
+class SessionRevokeRequest(InputBase):
+    session_id : UUID
+
+
+class SessionRevokeAllRequest(InputBase):
+    account_id : UUID
+
+
+
+class SessionRevokeAllResponse(OutputBase):
+    account_id : UUID
+    revoked_count : int
+
+
+class SessionRevokeOtherRequest(InputBase):
+    account_id : UUID
+    current_session_id : UUID
+
+
+    
+class SessionRevokeOtherResponse(OutputBase):
+    account_id : UUID
+    current_session_id : UUID
+    revoked_count : int
