@@ -68,14 +68,10 @@ from app.modules.auth.schemas import (
     TokenPairResponse,
     SessionRefreshRequest
 )
-from app.modules.auth.services.exceptions import (
-    AccountInactiveError,
-    AccountNotFoundError,
-    InvalidRefreshTokenError,
-    SessionNotFoundError,
-    SessionRevokedError,
-    SessionExpiredError,
-    TokenReuseDetectionError
+from app.infrastructure.exceptions import (
+    ApplicationError,
+    ErrorCategory,
+    REFRESH_TOKEN_REUSE,
 )
 
 from app.infrastructure.logging import get_logger
@@ -108,12 +104,18 @@ class SessionService:
         )
 
         if authenticated_account is None:
-            raise AccountNotFoundError(
-                "Auth account not found or does not exist"
+            raise ApplicationError(
+                category=ErrorCategory.NOT_FOUND,
+                code="ACCOUNT_NOT_FOUND",
+                message="Account does not exist",
             )
 
         if authenticated_account.status != AccountStatus.ACTIVE: 
-            raise AccountInactiveError("Auth account is inactive")
+            raise ApplicationError(
+                category=ErrorCategory.UNAUTHENTICATED,
+                code="ACCOUNT_INACTIVE",
+                message="Account is inactive",
+            )
 
         session_days = (
             settings.REMEMBER_ME_SESSION_DAYS
@@ -205,7 +207,11 @@ class SessionService:
         )
 
         if token_record is None:
-            raise InvalidRefreshTokenError("Refresh token is invalid")
+            raise ApplicationError(
+                category=ErrorCategory.UNAUTHENTICATED,
+                code="INVALID_REFRESH_TOKEN",
+                message="Refresh token is invalid",
+            )
 
         session = await AuthSessionRepository.get_by_id(
             db=db,
@@ -214,7 +220,11 @@ class SessionService:
         )
 
         if session is None:
-            raise SessionNotFoundError("Session does not exist")
+            raise ApplicationError(
+                category=ErrorCategory.UNAUTHENTICATED,
+                code="INVALID_REFRESH_TOKEN",
+                message="Refresh token is invalid",
+            )
 
         # Acquire account lock
 
@@ -225,7 +235,11 @@ class SessionService:
         )
 
         if account is None:
-            raise AccountNotFoundError("Account does not exist")
+            raise ApplicationError(
+                category=ErrorCategory.UNAUTHENTICATED,
+                code="INVALID_REFRESH_TOKEN",
+                message="Refresh token is invalid",
+            )
 
         # Acquire session lock
 
@@ -236,7 +250,11 @@ class SessionService:
         )
 
         if session is None:
-            raise SessionNotFoundError("Session does not exist")
+            raise ApplicationError(
+                category=ErrorCategory.UNAUTHENTICATED,
+                code="INVALID_REFRESH_TOKEN",
+                message="Refresh token is invalid",
+            )
 
         # Acquire refresh token lock
 
@@ -247,7 +265,11 @@ class SessionService:
         )
 
         if token_record is None:
-            raise InvalidRefreshTokenError("Refresh token is invalid")
+            raise ApplicationError(
+                category=ErrorCategory.UNAUTHENTICATED,
+                code="INVALID_REFRESH_TOKEN",
+                message="Refresh token is invalid",
+            )
 
         now = datetime.now(timezone.utc)
 
@@ -257,20 +279,37 @@ class SessionService:
             session.account_id != account.id
             or token_record.session_id != session.id
         ):
-            raise InvalidRefreshTokenError("Refresh token is invalid")
+            raise ApplicationError(
+                category=ErrorCategory.UNAUTHENTICATED,
+                code="INVALID_REFRESH_TOKEN",
+                message="Refresh token is invalid",
+            )
 
         # Validate account and session eligibility
 
         if account.status != AccountStatus.ACTIVE:
-            raise AccountInactiveError("Account is inactive")
+            raise ApplicationError(
+                category=ErrorCategory.UNAUTHENTICATED,
+                code="ACCOUNT_INACTIVE",
+                message="Account is inactive",
+            )
 
         if session.revoked_at is not None:
-            raise SessionRevokedError("Session has been revoked")
+            raise ApplicationError(
+                category=ErrorCategory.UNAUTHENTICATED,
+                code="SESSION_REVOKED",
+                message="Session has been revoked",
+            )
 
         if session.expires_at <= now:
-            raise SessionExpiredError("Session has expired")
+            raise ApplicationError(
+                category=ErrorCategory.UNAUTHENTICATED,
+                code="SESSION_EXPIRED",
+                message="Session has expired",
+            )
 
-        # Detect refresh token reuse
+        # Detect refresh token reuse. The outer refresh transaction must commit
+        # the revocation before propagating the REFRESH_TOKEN_REUSE error.
 
         if token_record.consumed_at is not None:
             session.revoked_at = now
@@ -281,19 +320,28 @@ class SessionService:
             )
 
             logger.warning(
-                "Refresh token reuse detected | session_id=%s | account_id=%s",
+                "Refresh token reuse detected | code=%s | category=%s | "
+                "session_id=%s | account_id=%s",
+                REFRESH_TOKEN_REUSE,
+                ErrorCategory.UNAUTHENTICATED.value,
                 session.id,
                 account.id,
             )
 
-            raise TokenReuseDetectionError(
-                "Refresh token reuse detected"
+            raise ApplicationError(
+                category=ErrorCategory.UNAUTHENTICATED,
+                code=REFRESH_TOKEN_REUSE,
+                message="Session is no longer valid",
             )
 
         # Validate refresh token expiration
 
         if token_record.expires_at <= now:
-            raise InvalidRefreshTokenError("Refresh token has expired")
+            raise ApplicationError(
+                category=ErrorCategory.UNAUTHENTICATED,
+                code="REFRESH_TOKEN_EXPIRED",
+                message="Refresh token has expired",
+            )
 
         # Recover original sliding session duration
 
@@ -366,7 +414,11 @@ class SessionService:
         )
 
         if expires_in <= 0:
-            raise SessionExpiredError("Session has expired")
+            raise ApplicationError(
+                category=ErrorCategory.UNAUTHENTICATED,
+                code="SESSION_EXPIRED",
+                message="Session has expired",
+            )
 
         access_token = create_access_token(
             claims,
