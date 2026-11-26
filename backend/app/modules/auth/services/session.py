@@ -74,15 +74,19 @@ from app.modules.auth.repositories import (
 )
 from app.modules.auth.schemas import (
     SessionCreateRequest,
+    SessionListRequest,
+    SessionListResponse,
+    SessionResponse,
     SessionRefreshRequest,
     SessionRevokeAllRequest,
     SessionRevokeAllResponse,
     SessionRevokeRequest,
+    SessionRevokeOtherRequest,
+    SessionRevokeOtherResponse,
     SessionValidationRequest,
     SessionValidationResponse,
     TokenPairResponse,
 )
-from backend.app.modules.auth.schemas.session import SessionRevokeOtherRequest
 
 logger = get_logger(__name__)
 
@@ -577,64 +581,145 @@ class SessionService:
 
         return revoke_all_response
 
-
-
     @staticmethod
     async def revoke_other_sessions(
-        db : AsyncSession,
-        payload : SessionRevokeOtherRequest
-    ):
-
+        db: AsyncSession,
+        payload: SessionRevokeOtherRequest,
+    ) -> SessionRevokeOtherResponse:
         account = await AuthAccountRepository.get_by_id(
-            db = db ,
-            account_id = payload.account_id,
-            lock = True
+            db=db,
+            account_id=payload.account_id,
+            lock=True,
         )
-
 
         if account is None:
             raise ApplicationError(
-                category = ErrorCategory.NOT_FOUND,
-                message = "Acount does not exist",
-                code = "ACCOUNT_NOT_FOUND"
+                category=ErrorCategory.NOT_FOUND,
+                code="ACCOUNT_NOT_FOUND",
+                message="Account does not exist",
             )
-
 
         current_session = await AuthSessionRepository.get_by_id(
-            db = db,
-            session_id=payload.current_session_id
-            lock = True
+            db=db,
+            session_id=payload.current_session_id,
+            lock=True,
         )
 
-
-        if current_session is None:
+        if current_session is None or current_session.account_id != account.id:
             raise ApplicationError(
-                category = ErrorCategory.UNAUTHENTICATED,
-                message = "Session is invalid",
-                code = "INVALID_SESSION"
+                category=ErrorCategory.UNAUTHENTICATED,
+                code="INVALID_SESSION",
+                message="Session is invalid",
             )
-
-
 
         now = datetime.now(timezone.utc)
 
         if current_session.revoked_at is not None:
             raise ApplicationError(
-                category = ErrorCategory.UNAUTHENTICATED,
-                code = "SESSION_REVOKED",
-                message = "Session has been revoked"
+                category=ErrorCategory.UNAUTHENTICATED,
+                code="SESSION_REVOKED",
+                message="Session has been revoked",
             )
 
         if current_session.expires_at <= now:
             raise ApplicationError(
-                category = ErrorCategory.UNAUTHENTICATED,
-                code = "SESSION_EXPIRED",
-                message = "Session has expired"
+                category=ErrorCategory.UNAUTHENTICATED,
+                code="SESSION_EXPIRED",
+                message="Session has expired",
             )
 
-        
+        if account.status != AccountStatus.ACTIVE:
+            raise ApplicationError(
+                category=ErrorCategory.UNAUTHENTICATED,
+                code="ACCOUNT_INACTIVE",
+                message="Account is inactive",
+            )
 
+        revoked_count = await AuthSessionRepository.update_revoked_at_by_account_id(
+            db=db,
+            account_id=account.id,
+            revoked_time=now,
+            exclude_session_id=current_session.id,
+        )
 
+        logger.info(
+            "Other session revocation prepared | "
+            "account_id=%s | current_session_id=%s | revoked_count=%s",
+            account.id,
+            current_session.id,
+            revoked_count,
+        )
 
+        return SessionRevokeOtherResponse(
+            account_id=account.id,
+            current_session_id=current_session.id,
+            revoked_count=revoked_count,
+        )
 
-        
+    @staticmethod
+    async def list_sessions(
+        db: AsyncSession,
+        payload: SessionListRequest,
+    ) -> SessionListResponse:
+        """List account-scoped session metadata for device management.
+
+        Account and current-session identifiers come from trusted caller
+        context. Authorization remains outside the service.
+        """
+        account = await AuthAccountRepository.get_by_id(
+            db=db,
+            account_id=payload.account_id,
+        )
+
+        if account is None:
+            raise ApplicationError(
+                category=ErrorCategory.NOT_FOUND,
+                code="ACCOUNT_NOT_FOUND",
+                message="Account does not exist",
+            )
+
+        now = datetime.now(timezone.utc)
+
+        sessions = await AuthSessionRepository.list_by_account_id(
+            db=db,
+            account_id=account.id,
+            limit=payload.limit,
+            offset=payload.offset,
+            active_at=now if payload.active_only else None,
+        )
+
+        total_count, active_count = (
+            await AuthSessionRepository.count_by_account_id(
+                db=db,
+                account_id=account.id,
+                active_at=now,
+            )
+        )
+
+        session_responses = [
+            SessionResponse(
+                session_id=session.id,
+                device_name=session.device_name,
+                user_agent=session.user_agent,
+                created_at=session.created_at,
+                last_activity_at=session.last_activity_at,
+                expires_at=session.expires_at,
+                revoked_at=session.revoked_at,
+                is_current=session.id == payload.current_session_id,
+                is_active=(
+                    session.revoked_at is None
+                    and session.expires_at > now
+                ),
+            )
+            for session in sessions
+        ]
+
+        return SessionListResponse(
+            account_id=account.id,
+            sessions=session_responses,
+            total_count=total_count,
+            active_count=active_count,
+            limit=payload.limit,
+            offset=payload.offset,
+            active_only=payload.active_only,
+        )

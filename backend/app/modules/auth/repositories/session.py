@@ -11,7 +11,7 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import select , update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.auth.models import AuthSession
@@ -36,7 +36,7 @@ class AuthSessionRepository:
         """Find a session by ID, optionally locking it for modification."""
         query = select(AuthSession).where(AuthSession.id == session_id)
         if lock:
-            query = query.with_for_update()
+            query = query.with_for_update().execution_options(populate_existing=True)
 
         result = await db.execute(query)
         return result.scalar_one_or_none()
@@ -59,7 +59,7 @@ class AuthSessionRepository:
             AuthSession.expires_at > now,
         )
         if lock:
-            query = query.with_for_update()
+            query = query.with_for_update().execution_options(populate_existing=True)
 
         result = await db.execute(query)
         return result.scalar_one_or_none()
@@ -70,20 +70,43 @@ class AuthSessionRepository:
         account_id: UUID,
         limit: int = 50,
         offset: int = 0,
+        *,
+        active_at: datetime | None = None,
     ) -> list[AuthSession]:
-        """List sessions for an account, newest first, including revoked ones.
+        """List account sessions, optionally unrevoked and unexpired at a timestamp."""
+        query = select(AuthSession).where(AuthSession.account_id == account_id)
 
-        The caller validates pagination and determines which sessions
-        should be presented as active.
-        """
+        if active_at is not None:
+            query = query.where(
+                AuthSession.revoked_at.is_(None),
+                AuthSession.expires_at > active_at,
+            )
+
         result = await db.execute(
-            select(AuthSession)
-            .where(AuthSession.account_id == account_id)
-            .order_by(AuthSession.created_at.desc(), AuthSession.id.desc())
+            query.order_by(AuthSession.created_at.desc(), AuthSession.id.desc())
             .offset(offset)
             .limit(limit)
         )
         return list(result.scalars().all())
+
+    @staticmethod
+    async def count_by_account_id(
+        db: AsyncSession,
+        account_id: UUID,
+        active_at: datetime,
+    ) -> tuple[int, int]:
+        """Return total and unrevoked, unexpired session counts for an account."""
+        result = await db.execute(
+            select(
+                func.count(AuthSession.id),
+                func.count(AuthSession.id).filter(
+                    AuthSession.revoked_at.is_(None),
+                    AuthSession.expires_at > active_at,
+                ),
+            ).where(AuthSession.account_id == account_id)
+        )
+        total_count, active_count = result.one()
+        return int(total_count), int(active_count)
 
     @staticmethod
     async def save(db: AsyncSession, session: AuthSession) -> AuthSession:
@@ -107,7 +130,6 @@ class AuthSessionRepository:
         await db.flush()
 
 
-
     @staticmethod
     async def update_revoked_at_by_account_id(
         db: AsyncSession,
@@ -116,6 +138,7 @@ class AuthSessionRepository:
         *,
         exclude_session_id: UUID | None = None,
     ) -> int:
+        """Set revocation timestamps on matching unrevoked rows and return their count."""
         query = (
             update(AuthSession)
             .where(
@@ -123,6 +146,7 @@ class AuthSessionRepository:
                 AuthSession.revoked_at.is_(None),
             )
             .values(revoked_at=revoked_time)
+            .returning(AuthSession.id)
             .execution_options(synchronize_session="fetch")
         )
 
@@ -133,4 +157,4 @@ class AuthSessionRepository:
 
         result = await db.execute(query)
 
-        return result.rowcount  # type: ignore[attr-defined]
+        return len(result.scalars().all())

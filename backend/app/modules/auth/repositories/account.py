@@ -99,7 +99,7 @@ class AuthAccountRepository:
         query = select(AuthAccount).where(AuthAccount.id == account_id)
 
         if lock:
-            query = query.with_for_update()
+            query = query.with_for_update().execution_options(populate_existing=True)
 
         result = await db.execute(query)
         return result.scalar_one_or_none()
@@ -131,7 +131,7 @@ class AuthAccountRepository:
         )
 
         if lock:
-            query = query.with_for_update()
+            query = query.with_for_update().execution_options(populate_existing=True)
 
         result = await db.execute(query)
         return result.scalar_one_or_none()

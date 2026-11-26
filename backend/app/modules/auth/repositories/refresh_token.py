@@ -41,7 +41,7 @@ class AuthRefreshTokenRepository:
         """Find a refresh-token record by ID, optionally locking the row."""
         query = select(AuthRefreshToken).where(AuthRefreshToken.id == token_id)
         if lock:
-            query = query.with_for_update()
+            query = query.with_for_update().execution_options(populate_existing=True)
 
         result = await db.execute(query)
         return result.scalar_one_or_none()
@@ -61,7 +61,7 @@ class AuthRefreshTokenRepository:
             AuthRefreshToken.token_hash == token_hash
         )
         if lock:
-            query = query.with_for_update()
+            query = query.with_for_update().execution_options(populate_existing=True)
 
         result = await db.execute(query)
         return result.scalar_one_or_none()
@@ -82,7 +82,7 @@ class AuthRefreshTokenRepository:
             AuthRefreshToken.consumed_at.is_(None),
         )
         if lock:
-            query = query.with_for_update()
+            query = query.with_for_update().execution_options(populate_existing=True)
 
         result = await db.execute(query)
         return result.scalar_one_or_none()
